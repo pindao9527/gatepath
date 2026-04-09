@@ -63,8 +63,17 @@ export function prepareTextsForModel(
   }
 
   const max = MAX_COMBINED_REVIEW_CHARS;
-  const rShare = Math.floor((max * rLen) / total);
-  const tShare = max - rShare;
+  let rShare = Math.floor((max * rLen) / total);
+  let tShare = max - rShare;
+  // 极端比例下 floor 可能使一侧份额为 0，但两侧均有正文时非空侧至少保留 1 字（在总额度允许时）
+  if (rLen > 0 && rShare === 0) {
+    rShare = Math.min(1, rLen);
+    tShare = max - rShare;
+  }
+  if (tLen > 0 && tShare === 0) {
+    tShare = Math.min(1, tLen);
+    rShare = max - tShare;
+  }
   const rOut = r!.slice(0, Math.min(rLen, rShare));
   const tOut = t!.slice(0, Math.min(tLen, tShare));
 

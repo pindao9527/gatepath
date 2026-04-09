@@ -13,37 +13,83 @@ const isHomeNavActive = computed(() =>
 
 <template>
   <div
-    class="min-h-screen flex flex-col font-sans text-base leading-6 font-normal antialiased bg-[#f6f6f6] dark:bg-[#1e1e1e] text-[#0f0f0f] dark:text-[#f6f6f6]"
+    class="relative min-h-dvh flex flex-col font-sans text-base leading-6 font-normal antialiased text-gp-ink bg-gp-canvas bg-gradient-to-b from-gp-canvas to-gp-canvas-2 dark:from-gp-canvas dark:to-gp-canvas-2 overflow-x-hidden"
   >
-    <header
-      class="shrink-0 border-b border-[#e8e8e8] dark:border-[#333] bg-white/80 dark:bg-[#252525]/90 backdrop-blur-sm"
+    <!-- 氛围光：固定层，不参与滚动重绘主体 -->
+    <div
+      class="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      aria-hidden="true"
     >
       <div
-        class="mx-auto max-w-3xl w-full px-4 h-14 flex items-center justify-between gap-4"
+        class="absolute -top-40 -right-16 h-[28rem] w-[28rem] rounded-full bg-gp-accent/[0.07] blur-3xl dark:bg-gp-accent/[0.05]"
+      />
+      <div
+        class="absolute -bottom-24 -left-20 h-[22rem] w-[26rem] rounded-full bg-gp-accent/[0.05] blur-3xl dark:bg-gp-accent/[0.04]"
+      />
+    </div>
+
+    <div class="gp-grain" aria-hidden="true" />
+
+    <header
+      class="relative z-20 shrink-0 border-b border-gp-border/90 bg-gp-elevated/95 backdrop-blur-xl shadow-[0_1px_0_var(--gp-shadow),inset_0_1px_0_rgba(255,255,255,0.06)] dark:shadow-[0_1px_0_var(--gp-shadow),inset_0_1px_0_rgba(255,255,255,0.04)]"
+    >
+      <div
+        class="h-px w-full bg-gradient-to-r from-transparent via-gp-accent/35 to-transparent"
+        aria-hidden="true"
+      />
+      <nav
+        class="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-10 min-h-[3.75rem] py-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        aria-label="主导航"
       >
-        <RouterLink
-          :to="{ name: 'review-input' }"
-          class="rounded-md px-3 py-1.5 text-sm no-underline text-[#555] dark:text-[#bbb] hover:bg-[#eee] dark:hover:bg-[#333]"
-          :class="
-            isHomeNavActive
-              ? 'bg-[#e8eefc] text-[#264a99] dark:bg-[#2a3550] dark:text-[#9ec5ff]'
-              : ''
-          "
+        <div class="flex flex-col gap-0.5 min-w-0 sm:pr-6">
+          <span
+            class="font-mono text-[0.62rem] font-medium uppercase tracking-[0.22em] text-gp-faint"
+          >
+            Gatepath
+          </span>
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <span class="text-lg font-semibold tracking-tight text-gp-ink">
+              门径
+            </span>
+            <span
+              class="text-xs font-normal text-gp-muted max-w-[20rem] leading-snug"
+            >
+              需求与测试文档的本地评审
+            </span>
+          </div>
+        </div>
+
+        <div
+          class="flex items-center gap-1.5 rounded-full p-1 bg-gp-surface/85 dark:bg-gp-surface/50 border border-gp-border/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md self-start sm:self-auto"
         >
-          首页
-        </RouterLink>
-        <RouterLink
-          to="/settings"
-          class="rounded-md px-3 py-1.5 text-sm no-underline text-[#555] dark:text-[#bbb] hover:bg-[#eee] dark:hover:bg-[#333] [&.router-link-active]:bg-[#e8eefc] [&.router-link-active]:text-[#264a99] dark:[&.router-link-active]:bg-[#2a3550] dark:[&.router-link-active]:text-[#9ec5ff]"
-          active-class="router-link-active"
-        >
-          设置
-        </RouterLink>
-      </div>
+          <RouterLink
+            :to="{ name: 'review-input' }"
+            class="rounded-full px-4 py-2 text-sm font-medium no-underline text-gp-muted transition-all duration-200 ease-out hover:text-gp-ink hover:bg-gp-canvas/80 dark:hover:bg-gp-canvas/40 active:scale-[0.98] gp-focus"
+            :class="
+              isHomeNavActive
+                ? 'bg-gp-accent-dim text-gp-accent font-semibold shadow-sm'
+                : ''
+            "
+          >
+            首页
+          </RouterLink>
+          <RouterLink
+            to="/settings"
+            class="rounded-full px-4 py-2 text-sm font-medium no-underline text-gp-muted transition-all duration-200 ease-out hover:text-gp-ink hover:bg-gp-canvas/80 dark:hover:bg-gp-canvas/40 active:scale-[0.98] gp-focus [&.router-link-active]:bg-gp-accent-dim [&.router-link-active]:text-gp-accent [&.router-link-active]:font-semibold [&.router-link-active]:shadow-sm"
+            active-class="router-link-active"
+          >
+            设置
+          </RouterLink>
+        </div>
+      </nav>
     </header>
 
-    <main class="flex-1 min-h-0">
-      <RouterView />
+    <main class="relative z-10 flex-1 min-h-0 flex flex-col">
+      <RouterView v-slot="{ Component }">
+        <Transition name="gp-view" mode="out-in">
+          <component :is="Component" />
+        </Transition>
+      </RouterView>
     </main>
   </div>
 </template>

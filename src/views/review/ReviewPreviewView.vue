@@ -71,79 +71,108 @@ function goReview() {
 </script>
 
 <template>
-  <div
-    class="mx-auto max-w-2xl w-full px-4 py-8 text-left font-sans text-[#0f0f0f] dark:text-[#f6f6f6]"
-  >
-    <h1 class="text-xl font-semibold tracking-tight mb-1">解析预览</h1>
-    <p class="text-sm text-[#666] dark:text-[#aaa] mb-6">
-      以下为解析后的评审输入摘要（全文在下一步）。确认无误后可进入评审。若两侧全文合计超过约
-      {{ MAX_COMBINED_REVIEW_CHARS.toLocaleString() }}
-      字，评审步骤会自动按比例截断后再请求模型。
-    </p>
-
-    <template v-if="hasAny">
-      <div class="space-y-8">
-        <section v-if="requirementText != null && requirementText.length > 0">
-          <h2 class="text-sm font-semibold text-[#333] dark:text-[#ccc]">
-            需求文档（评审输入）
-          </h2>
-          <p
-            v-if="requirementStats"
-            class="text-xs text-[#666] dark:text-[#999] mb-2 tabular-nums"
-          >
-            共 {{ requirementStats.chars }} 字符 · UTF-8 约
-            {{ requirementStats.utf8Bytes }} 字节
-            <span
-              v-if="requirementText.length > PREVIEW_MAX"
-              class="text-amber-800 dark:text-amber-200/90"
-            >
-              · 此处仅预览前 {{ PREVIEW_MAX }} 字符
-            </span>
-          </p>
-          <pre
-            class="max-h-[min(50vh,24rem)] overflow-auto rounded-lg border border-[#e0e0e0] dark:border-[#444] bg-white dark:bg-[#1a1a1a] p-3 text-xs whitespace-pre-wrap break-words text-[#333] dark:text-[#ddd]"
-            >{{ previewBody(requirementText) }}</pre
-          >
-        </section>
-        <section v-if="testText != null && testText.length > 0">
-          <h2 class="text-sm font-semibold text-[#333] dark:text-[#ccc]">
-            测试文档（评审输入）
-          </h2>
-          <p
-            v-if="testStats"
-            class="text-xs text-[#666] dark:text-[#999] mb-2 tabular-nums"
-          >
-            共 {{ testStats.chars }} 字符 · UTF-8 约
-            {{ testStats.utf8Bytes }} 字节
-            <span
-              v-if="testText.length > PREVIEW_MAX"
-              class="text-amber-800 dark:text-amber-200/90"
-            >
-              · 此处仅预览前 {{ PREVIEW_MAX }} 字符
-            </span>
-          </p>
-          <pre
-            class="max-h-[min(50vh,24rem)] overflow-auto rounded-lg border border-[#e0e0e0] dark:border-[#444] bg-white dark:bg-[#1a1a1a] p-3 text-xs whitespace-pre-wrap break-words text-[#333] dark:text-[#ddd]"
-            >{{ previewBody(testText) }}</pre
-          >
-        </section>
-      </div>
-
-      <div class="mt-8 flex flex-wrap items-center gap-3">
+  <div class="gp-page-wrap">
+    <div
+      class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 mb-6"
+    >
+      <nav class="gp-workflow-crumb mb-0" aria-label="流程位置">
+        <span class="text-gp-faint">录入</span>
+        <span class="text-gp-faint" aria-hidden="true">/</span>
+        <span class="text-gp-accent font-medium">预览</span>
+        <span class="text-gp-faint" aria-hidden="true">/</span>
+        <span class="text-gp-faint">评审</span>
+      </nav>
+      <div
+        v-if="hasAny"
+        class="flex flex-wrap items-center gap-3 shrink-0"
+      >
         <button
           type="button"
-          class="rounded-lg px-5 py-2.5 text-sm font-medium border border-[#e0e0e0] dark:border-[#444] bg-white dark:bg-[#222] text-[#333] dark:text-[#e8e8e8] hover:bg-[#f5f5f5] dark:hover:bg-[#2a2a2a] transition-colors"
+          class="gp-btn-secondary px-4 py-2.5 text-sm"
           @click="goBack"
         >
-          ← 返回修改
+          返回修改
         </button>
         <button
           type="button"
-          class="rounded-lg px-5 py-2.5 text-sm font-medium cursor-pointer bg-[#396cd8] text-white hover:bg-[#2d56b3] active:bg-[#264a99] transition-colors"
+          class="gp-btn-primary px-4 py-2.5 text-sm cursor-pointer"
           @click="goReview"
         >
           进入评审
         </button>
+      </div>
+    </div>
+
+    <header class="gp-page-head">
+      <p class="gp-kicker">02 · 预览</p>
+      <h1 class="gp-title mb-3">解析预览</h1>
+      <p class="gp-lead">
+        以下为解析后的评审输入摘要（全文在下一步）。确认无误后可进入评审。若两侧全文合计超过约
+        <span class="font-mono tabular-nums text-gp-ink">{{
+          MAX_COMBINED_REVIEW_CHARS.toLocaleString()
+        }}</span>
+        字，评审步骤会自动按比例截断后再请求模型。
+      </p>
+    </header>
+
+    <template v-if="hasAny">
+      <div
+        class="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:gap-8 xl:items-start"
+      >
+        <section
+          v-if="requirementText != null && requirementText.length > 0"
+          class="gp-panel flex flex-col min-h-0"
+        >
+          <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <h2 class="text-sm font-semibold tracking-tight text-gp-ink">
+              需求文档（评审输入）
+            </h2>
+            <p
+              v-if="requirementStats"
+              class="text-xs text-gp-muted tabular-nums text-right"
+            >
+              <span class="font-mono">{{ requirementStats.chars }}</span>
+              字符 · UTF-8
+              <span class="font-mono">{{ requirementStats.utf8Bytes }}</span>
+              字节
+            </p>
+          </div>
+          <p
+            v-if="requirementText.length > PREVIEW_MAX"
+            class="gp-callout-warn text-xs mb-3"
+          >
+            此处仅预览前 {{ PREVIEW_MAX }} 字符；全文仍会在下一步送交模型（受截断策略约束）。
+          </p>
+          <pre class="gp-pre-block flex-1 min-h-0 mt-auto">{{
+            previewBody(requirementText)
+          }}</pre>
+        </section>
+
+        <section
+          v-if="testText != null && testText.length > 0"
+          class="gp-panel flex flex-col min-h-0"
+        >
+          <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <h2 class="text-sm font-semibold tracking-tight text-gp-ink">
+              测试文档（评审输入）
+            </h2>
+            <p v-if="testStats" class="text-xs text-gp-muted tabular-nums text-right">
+              <span class="font-mono">{{ testStats.chars }}</span>
+              字符 · UTF-8
+              <span class="font-mono">{{ testStats.utf8Bytes }}</span>
+              字节
+            </p>
+          </div>
+          <p
+            v-if="testText.length > PREVIEW_MAX"
+            class="gp-callout-warn text-xs mb-3"
+          >
+            此处仅预览前 {{ PREVIEW_MAX }} 字符；全文仍会在下一步送交模型（受截断策略约束）。
+          </p>
+          <pre class="gp-pre-block flex-1 min-h-0 mt-auto">{{
+            previewBody(testText)
+          }}</pre>
+        </section>
       </div>
     </template>
   </div>

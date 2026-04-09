@@ -14,12 +14,24 @@ import {
 } from "../../lib/reviewSession";
 import { MAX_COMBINED_REVIEW_CHARS } from "../../lib/reviewContentBudget";
 import {
-  TAVERN_ROLES,
+  buildTavernRoleChain,
+  extractTavernRolesWithModel,
+  getDefaultTavernMiddleRoles,
   runDocumentReview,
   runTavernDocumentReview,
   type BetweenRoundsContext,
   type ReviewResult,
+  type TavernRoleConfig,
 } from "../../lib/reviewApi";
+import { prepareTextsForModel } from "../../lib/reviewContentBudget";
+import {
+  inferRuleHitsFromText,
+  mergeMiddleRolesFromSources,
+  rebuildMiddleRolesPrompts,
+  TAVERN_V2E_MAX_MIDDLE_ROLES,
+  TAVERN_V2E_MAX_TOTAL_ROUNDS,
+  validateMiddleRoleCount,
+} from "../../lib/tavernDynamicRoles";
 
 const router = useRouter();
 const {
@@ -62,6 +74,14 @@ const configReady = computed(() => {
 const reviewing = ref(false);
 const reviewError = ref<string | null>(null);
 const reviewResult = ref<ReviewResult | null>(null);
+/** 已有评审结果时，为 false 则隐藏模式/酒馆等选项；点「重新评审」置 true 再展开 */
+const revealReviewOptions = ref(false);
+
+const showReviewConfigPanel = computed(() => {
+  if (reviewing.value) return false;
+  if (!reviewResult.value) return true;
+  return revealReviewOptions.value;
+});
 /** 最近一次送交模型前因长度预算产生的提示 */
 const truncationWarnings = ref<string[]>([]);
 let abort: AbortController | null = null;
@@ -72,6 +92,23 @@ const reviewMode = ref<ReviewMode>("tavern");
 const tavernUserNote = ref("");
 /** 酒馆：在相邻两轮角色之间暂停，允许插话后再继续 */
 const tavernBetweenRounds = ref(false);
+
+/** v2-E：中间角色（不含主持），可编辑 */
+function cloneDefaultMiddleRoles(): TavernRoleConfig[] {
+  return rebuildMiddleRolesPrompts(
+    getDefaultTavernMiddleRoles().map((r) => ({ ...r })),
+  );
+}
+
+const tavernMiddleRoles = ref<TavernRoleConfig[]>(cloneDefaultMiddleRoles());
+/** 本轮评审实际角色链（含主持），用于轮次序号 */
+const activeTavernChain = ref<TavernRoleConfig[]>([]);
+/** E5：智能推断时是否纳入测试文档 */
+const tavernInferUseTest = ref(false);
+/** E1：智能推断时是否额外调用模型抽取（一次额外 API） */
+const tavernInferUseModel = ref(false);
+const roleSuggestBusy = ref(false);
+const roleSuggestError = ref<string | null>(null);
 
 interface TavernChatItem {
   id: string;
@@ -93,8 +130,18 @@ const interjectionDraft = ref("");
 
 const tavernMessages = ref<TavernChatItem[]>([]);
 const tavernRoundIndex = ref(0);
-const tavernRoundTotal = TAVERN_ROLES.length;
+const tavernRoundTotal = computed(
+  () =>
+    activeTavernChain.value.length > 0
+      ? activeTavernChain.value.length
+      : buildTavernRoleChain(tavernMiddleRoles.value).length,
+);
 const tavernListEl = ref<HTMLElement | null>(null);
+
+const tavernChainSummary = computed(() => {
+  const mid = tavernMiddleRoles.value.map((r) => r.speaker).join(" → ");
+  return mid ? `${mid} → 综合主持` : "综合主持";
+});
 
 function scrollTavernToBottom() {
   void nextTick(() => {
@@ -110,7 +157,7 @@ const tavernStatusLine = computed(() => {
     return `酒馆：可插话或跳过 → 下一位「${nextName}」`;
   }
   if (tavernRoundIndex.value <= 0) return "酒馆：准备首轮…";
-  return `酒馆：第 ${tavernRoundIndex.value} / ${tavernRoundTotal} 轮流式输出中…`;
+  return `酒馆：第 ${tavernRoundIndex.value} / ${tavernRoundTotal.value} 轮流式输出中…`;
 });
 
 onMounted(async () => {
@@ -143,6 +190,10 @@ function goBack() {
   router.push({ name: "review-preview" });
 }
 
+function openReviewOptionsForRetry() {
+  revealReviewOptions.value = true;
+}
+
 async function startReview() {
   reviewError.value = null;
   truncationWarnings.value = [];
@@ -151,6 +202,14 @@ async function startReview() {
   abort?.abort();
   abort = new AbortController();
   const signal = abort.signal;
+  if (reviewMode.value === "tavern") {
+    const roleBudget = validateMiddleRoleCount(tavernMiddleRoles.value.length);
+    if (!roleBudget.ok) {
+      reviewError.value = roleBudget.warnings.join(" ");
+      return;
+    }
+  }
+  revealReviewOptions.value = false;
   reviewing.value = true;
   try {
     if (reviewMode.value === "quick") {
@@ -165,6 +224,8 @@ async function startReview() {
       reviewResult.value = outcome.result;
       truncationWarnings.value = outcome.truncationWarnings;
     } else {
+      const chain = buildTavernRoleChain(tavernMiddleRoles.value);
+      activeTavernChain.value = chain;
       const outcome = await runTavernDocumentReview({
         baseUrl: baseUrl.value.trim(),
         apiKey: apiKey.value.trim(),
@@ -173,10 +234,13 @@ async function startReview() {
         testText: testText.value,
         userNote: tavernUserNote.value.trim() || null,
         signal,
+        tavernRoles: chain,
         callbacks: {
           onRoundStart: (role) => {
-            tavernRoundIndex.value =
-              TAVERN_ROLES.findIndex((r) => r.id === role.id) + 1;
+            const idx = activeTavernChain.value.findIndex(
+              (r) => r.id === role.id,
+            );
+            tavernRoundIndex.value = idx >= 0 ? idx + 1 : 1;
             tavernMessages.value.push({
               id: `${Date.now()}-${role.id}-${Math.random().toString(36).slice(2)}`,
               kind: "assistant",
@@ -252,6 +316,7 @@ async function startReview() {
       e instanceof Error ? e.message : "评审请求失败，请稍后重试。";
   } finally {
     reviewing.value = false;
+    activeTavernChain.value = [];
   }
 }
 
@@ -266,34 +331,158 @@ function skipInterjection() {
 function submitInterjection() {
   interjectionGate.value?.finish(interjectionDraft.value);
 }
+
+function moveMiddleRole(index: number, delta: number) {
+  const arr = tavernMiddleRoles.value;
+  const j = index + delta;
+  if (j < 0 || j >= arr.length) return;
+  const next = [...arr];
+  const t = next[index]!;
+  next[index] = next[j]!;
+  next[j] = t;
+  tavernMiddleRoles.value = rebuildMiddleRolesPrompts(next);
+}
+
+function removeMiddleRole(index: number) {
+  const next = tavernMiddleRoles.value.filter((_, i) => i !== index);
+  if (next.length === 0) return;
+  tavernMiddleRoles.value = rebuildMiddleRolesPrompts(next);
+}
+
+function addMiddleRole() {
+  if (tavernMiddleRoles.value.length >= TAVERN_V2E_MAX_MIDDLE_ROLES) return;
+  const next = [
+    ...tavernMiddleRoles.value,
+    {
+      id: `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      speaker: "新角色",
+      shortLabel: "新",
+      avatarClass: "bg-zinc-500 dark:bg-zinc-600",
+      turnUserPrompt: "",
+      jsonOutput: false,
+    },
+  ];
+  tavernMiddleRoles.value = rebuildMiddleRolesPrompts(next);
+}
+
+function updateMiddleSpeaker(index: number, speaker: string) {
+  const next = tavernMiddleRoles.value.map((r, i) =>
+    i === index ? { ...r, speaker } : r,
+  );
+  tavernMiddleRoles.value = rebuildMiddleRolesPrompts(next);
+}
+
+function updateMiddleShortLabel(index: number, shortLabel: string) {
+  const next = tavernMiddleRoles.value.map((r, i) =>
+    i === index ? { ...r, shortLabel } : r,
+  );
+  tavernMiddleRoles.value = rebuildMiddleRolesPrompts(next);
+}
+
+async function suggestTavernRoles() {
+  roleSuggestError.value = null;
+  if (!configReady.value) {
+    roleSuggestError.value = "请先完成 API 配置。";
+    return;
+  }
+  roleSuggestBusy.value = true;
+  try {
+    const prepared = prepareTextsForModel(
+      requirementText.value,
+      testText.value,
+    );
+    const ruleHits = inferRuleHitsFromText(
+      requirementText.value,
+      testText.value,
+      tavernInferUseTest.value,
+    );
+    let modelRoles = null;
+    if (tavernInferUseModel.value) {
+      modelRoles = await extractTavernRolesWithModel({
+        baseUrl: baseUrl.value.trim(),
+        apiKey: apiKey.value.trim(),
+        model: model.value.trim(),
+        requirementText: prepared.requirementText,
+        testText: prepared.testText,
+        useTestDocumentForInference: tavernInferUseTest.value,
+      });
+    }
+    const merged = mergeMiddleRolesFromSources({
+      ruleHits,
+      modelRoles,
+      fallbackMiddle: getDefaultTavernMiddleRoles().map((r) => ({ ...r })),
+    });
+    tavernMiddleRoles.value = rebuildMiddleRolesPrompts(merged);
+  } catch (e) {
+    roleSuggestError.value =
+      e instanceof Error ? e.message : "角色推断失败。";
+  } finally {
+    roleSuggestBusy.value = false;
+  }
+}
+
+function resetTavernRolesToDefault() {
+  tavernMiddleRoles.value = cloneDefaultMiddleRoles();
+  roleSuggestError.value = null;
+}
 </script>
 
 <template>
-  <div
-    class="mx-auto max-w-2xl w-full px-4 py-8 text-left font-sans text-[#0f0f0f] dark:text-[#f6f6f6]"
-  >
-    <h1 class="text-xl font-semibold tracking-tight mb-1">评审</h1>
-    <p class="text-sm text-[#666] dark:text-[#aaa] mb-6">
-      解析正文已在上一步「解析预览」中核对。本页发起模型评审：可选<strong class="font-medium text-[#333] dark:text-[#ccc]">快速评审</strong>（单次 JSON）或<strong class="font-medium text-[#333] dark:text-[#ccc]">酒馆模式</strong>（多角色串行、SSE
-      流式、末轮汇总得分与建议）。
-    </p>
-
-    <p
-      v-if="!settingsLoaded"
-      class="text-sm text-[#666] dark:text-[#aaa] mb-4"
+  <div class="gp-page-wrap gp-page-wrap-wide">
+    <div
+      class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 mb-6"
     >
-      正在加载配置…
-    </p>
+      <nav class="gp-workflow-crumb mb-0" aria-label="流程位置">
+        <span class="text-gp-faint">录入</span>
+        <span class="text-gp-faint" aria-hidden="true">/</span>
+        <span class="text-gp-faint">预览</span>
+        <span class="text-gp-faint" aria-hidden="true">/</span>
+        <span class="text-gp-accent font-medium">评审</span>
+      </nav>
+      <div class="gp-action-bar shrink-0">
+        <button
+          type="button"
+          class="gp-btn-secondary px-4 py-2.5 text-sm font-medium"
+          @click="goBack"
+        >
+          返回解析预览
+        </button>
+      </div>
+    </div>
+
+    <header class="gp-page-head">
+      <p class="gp-kicker">03 · 评审</p>
+      <h1 class="gp-title mb-3">评审</h1>
+      <p class="gp-lead">
+        解析正文已在上一步「解析预览」中核对。本页发起模型评审：可选<strong
+          class="font-medium text-gp-ink"
+          >快速评审</strong
+        >（单次 JSON）或<strong class="font-medium text-gp-ink">酒馆模式</strong
+        >（多角色串行、SSE
+        流式；中间角色可自定义或智能建议（首轮分「现象 / 依据 / 建议」，后续轮对照前序；末轮固定「综合主持」JSON 汇总）。
+      </p>
+    </header>
+
+    <div
+      v-if="!settingsLoaded"
+      class="gp-panel-quiet mb-6 space-y-3 max-w-md"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <div class="h-3 w-32 gp-skeleton-bar" />
+      <div class="h-10 w-full gp-skeleton-bar" />
+      <p class="text-xs text-gp-faint font-mono">正在加载配置…</p>
+    </div>
 
     <div
       v-else-if="!configReady"
-      class="mb-6 text-sm rounded-lg border border-amber-200 dark:border-amber-900/80 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100/95 px-3 py-2"
+      class="gp-callout-warn mb-6"
       role="status"
     >
       请先在
       <RouterLink
         to="/settings"
-        class="text-[#396cd8] dark:text-[#6b9eff] underline underline-offset-2"
+        class="text-gp-accent underline underline-offset-2 font-medium"
         >设置</RouterLink
       >
       填写 Base URL、Model 与 API Key（桌面端可将 Key 存入系统钥匙串）。
@@ -301,10 +490,11 @@ function submitInterjection() {
 
     <div
       v-else
-      class="mb-6 space-y-4"
+      class="mb-8 space-y-6"
     >
+      <div v-if="showReviewConfigPanel" class="gp-panel space-y-6">
       <fieldset
-        class="flex flex-wrap gap-4 border-0 p-0 m-0"
+        class="flex flex-wrap gap-6 border-0 p-0 m-0 pb-1 border-b border-gp-border/50"
         :disabled="reviewing"
       >
         <legend class="sr-only">评审模式</legend>
@@ -315,7 +505,7 @@ function submitInterjection() {
             v-model="reviewMode"
             type="radio"
             value="quick"
-            class="accent-[#396cd8]"
+            class="accent-gp-accent"
           />
           快速评审
         </label>
@@ -326,7 +516,7 @@ function submitInterjection() {
             v-model="reviewMode"
             type="radio"
             value="tavern"
-            class="accent-[#396cd8]"
+            class="accent-gp-accent"
           />
           酒馆模式（流式 · 多角色）
         </label>
@@ -334,12 +524,12 @@ function submitInterjection() {
 
       <div v-if="reviewMode === 'tavern'" class="space-y-3">
         <label
-          class="flex items-start gap-2 text-sm text-[#333] dark:text-[#ccc] cursor-pointer select-none"
+          class="flex items-start gap-2 text-sm text-gp-ink cursor-pointer select-none"
         >
           <input
             v-model="tavernBetweenRounds"
             type="checkbox"
-            class="mt-0.5 accent-[#396cd8] shrink-0"
+            class="mt-0.5 accent-gp-accent shrink-0"
             :disabled="reviewing"
           />
           <span
@@ -349,7 +539,7 @@ function submitInterjection() {
         <div class="space-y-2">
           <label
             for="tavern-note"
-            class="block text-xs font-medium text-[#555] dark:text-[#aaa]"
+            class="block text-xs font-medium text-gp-muted mb-1.5"
             >参与者补充（可选，插入在角色发言前）</label
           >
           <textarea
@@ -358,38 +548,210 @@ function submitInterjection() {
             rows="2"
             :disabled="reviewing"
             placeholder="例如：请重点关注登录与权限相关用例…"
-            class="w-full rounded-lg border border-[#e0e0e0] dark:border-[#444] bg-white dark:bg-[#1a1a1a] text-sm px-3 py-2 text-[#0f0f0f] dark:text-[#f6f6f6] placeholder:text-[#999] focus:outline-none focus:ring-2 focus:ring-[#396cd8]/40 disabled:opacity-50"
+            class="gp-input w-full text-sm py-2 disabled:opacity-50"
           />
         </div>
+
+        <div class="gp-panel-quiet space-y-3">
+          <div class="space-y-1">
+            <p class="text-sm font-semibold text-gp-ink">
+              中间角色（开始前确认）
+            </p>
+            <p class="text-xs text-gp-muted leading-relaxed">
+              发言顺序即列表顺序；末轮固定为「综合主持」输出得分与建议 JSON。中间角色上限
+              {{ TAVERN_V2E_MAX_MIDDLE_ROLES }} 个，合计最多
+              {{ TAVERN_V2E_MAX_TOTAL_ROUNDS }} 轮请求（含主持）。正文长度仍受
+              「准备评审」截断策略约束。
+            </p>
+            <p
+              class="text-xs text-gp-accent font-semibold"
+              aria-live="polite"
+            >
+              {{ tavernChainSummary }}
+            </p>
+          </div>
+
+          <ul class="space-y-2">
+            <li
+              v-for="(role, index) in tavernMiddleRoles"
+              :key="role.id"
+              class="flex flex-wrap items-end gap-2 p-2 rounded-lg border border-gp-border bg-gp-surface"
+            >
+              <label class="flex-1 min-w-[8rem] space-y-0.5">
+                <span class="text-[11px] font-medium tracking-wide text-gp-faint"
+                  >称呼</span
+                >
+                <input
+                  :value="role.speaker"
+                  type="text"
+                  :disabled="reviewing"
+                  class="w-full rounded-md border border-gp-border bg-gp-surface text-sm px-2 py-1.5 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-gp-accent"
+                  @change="
+                    updateMiddleSpeaker(
+                      index,
+                      ($event.target as HTMLInputElement).value,
+                    )
+                  "
+                />
+              </label>
+              <label class="w-20 space-y-0.5">
+                <span class="text-[11px] font-medium tracking-wide text-gp-faint"
+                  >简称</span
+                >
+                <input
+                  :value="role.shortLabel"
+                  type="text"
+                  maxlength="8"
+                  :disabled="reviewing"
+                  class="w-full rounded-md border border-gp-border bg-gp-surface text-sm px-2 py-1.5 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-gp-accent"
+                  @change="
+                    updateMiddleShortLabel(
+                      index,
+                      ($event.target as HTMLInputElement).value,
+                    )
+                  "
+                />
+              </label>
+              <div class="flex gap-1 shrink-0">
+                <button
+                  type="button"
+                  class="rounded-md border border-gp-border bg-gp-surface text-xs px-2 py-1.5 transition-colors hover:bg-gp-canvas disabled:opacity-40 gp-focus"
+                  :disabled="reviewing || index === 0"
+                  title="上移"
+                  @click="moveMiddleRole(index, -1)"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md border border-gp-border bg-gp-surface text-xs px-2 py-1.5 transition-colors hover:bg-gp-canvas disabled:opacity-40 gp-focus"
+                  :disabled="
+                    reviewing || index >= tavernMiddleRoles.length - 1
+                  "
+                  title="下移"
+                  @click="moveMiddleRole(index, 1)"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md border border-red-300/80 dark:border-red-900/90 text-xs px-2 py-1.5 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-40 gp-focus"
+                  :disabled="reviewing || tavernMiddleRoles.length <= 1"
+                  title="删除"
+                  @click="removeMiddleRole(index)"
+                >
+                  删
+                </button>
+              </div>
+            </li>
+          </ul>
+
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="gp-btn-secondary text-sm px-3 py-1.5 disabled:opacity-50"
+              :disabled="
+                reviewing ||
+                tavernMiddleRoles.length >= TAVERN_V2E_MAX_MIDDLE_ROLES
+              "
+              @click="addMiddleRole"
+            >
+              添加角色
+            </button>
+            <button
+              type="button"
+              class="gp-btn-secondary text-sm px-3 py-1.5 disabled:opacity-50"
+              :disabled="reviewing"
+              @click="resetTavernRolesToDefault"
+            >
+              恢复默认（产品 + 测试）
+            </button>
+          </div>
+
+          <div
+            class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-4 text-xs text-gp-muted"
+          >
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input
+                v-model="tavernInferUseTest"
+                type="checkbox"
+                class="accent-gp-accent shrink-0"
+                :disabled="reviewing || roleSuggestBusy"
+              />
+              智能推断时纳入测试文档（默认仅需求侧，降低复杂度）
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input
+                v-model="tavernInferUseModel"
+                type="checkbox"
+                class="accent-gp-accent shrink-0"
+                :disabled="reviewing || roleSuggestBusy"
+              />
+              同时请求模型抽取角色（额外一次 API）
+            </label>
+          </div>
+
+          <div class="flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              class="gp-btn rounded-lg bg-gp-ink text-gp-canvas dark:bg-gp-surface dark:text-gp-ink text-sm font-medium px-3 py-1.5 shadow-sm hover:opacity-95 active:scale-[0.98] disabled:opacity-50 gp-focus"
+              :disabled="reviewing || roleSuggestBusy || !configReady"
+              @click="suggestTavernRoles"
+            >
+              {{ roleSuggestBusy ? "推断中…" : "根据文档智能建议角色" }}
+            </button>
+          </div>
+          <p
+            v-if="roleSuggestError"
+            class="gp-inline-error text-xs"
+            role="alert"
+          >
+            {{ roleSuggestError }}
+          </p>
+        </div>
+      </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          class="rounded-lg bg-[#396cd8] text-white text-sm font-medium px-4 py-2.5 hover:bg-[#2f5ac4] disabled:opacity-50 disabled:pointer-events-none transition-colors"
-          :disabled="reviewing || !hasAny"
-          @click="startReview"
+      <div class="gp-action-bar">
+        <template
+          v-if="!showReviewConfigPanel && reviewResult && !reviewing"
         >
-          {{ reviewResult ? "重新评审" : "开始评审" }}
-        </button>
-        <button
-          v-if="reviewing"
-          type="button"
-          class="rounded-lg border border-[#e0e0e0] dark:border-[#444] text-sm px-4 py-2.5 bg-white dark:bg-[#1a1a1a] hover:bg-[#f5f5f5] dark:hover:bg-[#252525]"
-          @click="cancelReview"
-        >
-          取消
-        </button>
-        <span
-          v-if="reviewing && reviewMode === 'quick'"
-          class="text-sm text-[#666] dark:text-[#aaa]"
-          >正在请求模型并等待 JSON 结果…</span
-        >
-        <span
-          v-else-if="reviewing && reviewMode === 'tavern'"
-          class="text-sm text-[#666] dark:text-[#aaa]"
-          >{{ tavernStatusLine }}</span
-        >
+          <button
+            type="button"
+            class="gp-btn-primary px-4 py-2.5 text-sm"
+            @click="openReviewOptionsForRetry"
+          >
+            重新评审
+          </button>
+        </template>
+        <template v-else>
+          <button
+            type="button"
+            class="gp-btn-primary px-4 py-2.5 text-sm"
+            :disabled="reviewing || !hasAny"
+            @click="startReview"
+          >
+            开始评审
+          </button>
+          <button
+            v-if="reviewing"
+            type="button"
+            class="gp-btn-secondary text-sm px-4 py-2.5"
+            @click="cancelReview"
+          >
+            取消
+          </button>
+          <span
+            v-if="reviewing && reviewMode === 'quick'"
+            class="text-sm text-gp-muted"
+            >正在请求模型并等待 JSON 结果…</span
+          >
+          <span
+            v-else-if="reviewing && reviewMode === 'tavern'"
+            class="text-sm text-gp-muted"
+            >{{ tavernStatusLine }}</span
+          >
+        </template>
       </div>
     </div>
 
@@ -399,11 +761,11 @@ function submitInterjection() {
         (tavernMessages.length > 0 || interjectionGate)
       "
       ref="tavernListEl"
-      class="mb-8 rounded-xl border border-[#e0e0e0] dark:border-[#444] bg-[#fafafa] dark:bg-[#141414] max-h-[min(60vh,28rem)] overflow-y-auto flex flex-col"
+      class="gp-panel mb-8 max-h-[min(60dvh,30rem)] overflow-y-auto flex flex-col !p-0"
       role="log"
       aria-live="polite"
     >
-      <ul class="p-3 space-y-4 flex-1 min-h-0">
+      <ul class="p-4 md:p-5 space-y-4 flex-1 min-h-0">
         <li
           v-for="m in tavernMessages"
           :key="m.id"
@@ -425,12 +787,12 @@ function submitInterjection() {
               class="flex items-baseline gap-2 flex-wrap"
               :class="m.kind === 'user' ? 'justify-end' : ''"
             >
-              <span class="text-sm font-medium text-[#222] dark:text-[#e0e0e0]">{{
+              <span class="text-sm font-semibold text-gp-ink">{{
                 m.speaker
               }}</span>
               <span
                 v-if="m.streaming"
-                class="text-xs text-[#888] dark:text-[#777] tabular-nums"
+                class="text-xs text-gp-faint tabular-nums"
                 >输出中…</span
               >
             </div>
@@ -438,8 +800,8 @@ function submitInterjection() {
               class="rounded-lg border px-3 py-2 text-sm whitespace-pre-wrap break-words inline-block max-w-full text-left"
               :class="
                 m.kind === 'user'
-                  ? 'border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-800/80 text-[#222] dark:text-[#e8e8e8]'
-                  : 'border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#1a1a1a] text-[#333] dark:text-[#ddd]'
+                  ? 'border-gp-border bg-gp-accent-dim text-gp-ink'
+                  : 'border-gp-border bg-gp-surface text-gp-ink'
               "
             >
               {{ m.content }}
@@ -450,28 +812,28 @@ function submitInterjection() {
 
       <div
         v-if="interjectionGate"
-        class="shrink-0 border-t border-[#e0e0e0] dark:border-[#444] p-3 bg-[#f0f4ff] dark:bg-[#1e2435] space-y-2"
+        class="shrink-0 border-t border-gp-border p-3 bg-gp-accent-dim space-y-2"
       >
-        <p class="text-xs font-medium text-[#333] dark:text-[#ccc]">
-          下一位：{{ interjectionGate.ctx.nextRole.speaker }} — 可选插话（会写入对话上下文）
+        <p class="text-xs font-medium text-gp-ink">
+          下一位：{{ interjectionGate.ctx.nextRole.speaker }} — 可选插话（将作为下一轮独立请求的 user 消息）
         </p>
         <textarea
           v-model="interjectionDraft"
           rows="2"
           placeholder="输入补充意见，或留空后点「跳过」…"
-          class="w-full rounded-lg border border-[#c8d4f0] dark:border-[#3d4a66] bg-white dark:bg-[#1a1a1a] text-sm px-3 py-2 text-[#0f0f0f] dark:text-[#f6f6f6] placeholder:text-[#999] focus:outline-none focus:ring-2 focus:ring-[#396cd8]/40"
+          class="gp-input w-full text-sm py-2"
         />
         <div class="flex flex-wrap gap-2 justify-end">
           <button
             type="button"
-            class="rounded-lg border border-[#e0e0e0] dark:border-[#555] text-sm px-3 py-1.5 bg-white dark:bg-[#252525] hover:bg-[#f5f5f5] dark:hover:bg-[#333]"
+            class="gp-btn-secondary text-sm px-3 py-1.5"
             @click="skipInterjection"
           >
             跳过，直接继续
           </button>
           <button
             type="button"
-            class="rounded-lg bg-[#396cd8] text-white text-sm font-medium px-3 py-1.5 hover:bg-[#2f5ac4]"
+            class="gp-btn-primary text-sm px-3 py-1.5"
             @click="submitInterjection"
           >
             插入并继续
@@ -482,7 +844,7 @@ function submitInterjection() {
 
     <p
       v-if="mayExceedModelBudget && configReady && hasAny && !reviewing"
-      class="mb-4 text-sm rounded-lg border border-amber-200 dark:border-amber-900/80 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100/95 px-3 py-2"
+      class="gp-callout-warn mb-4"
       role="status"
     >
       两侧解析正文合计约 {{ combinedChars.toLocaleString() }} 字，超过单次送交建议上限（约
@@ -497,40 +859,33 @@ function submitInterjection() {
       <p
         v-for="(w, i) in truncationWarnings"
         :key="i"
-        class="text-sm rounded-lg border border-sky-200 dark:border-sky-900/80 bg-sky-50 dark:bg-sky-950/35 text-sky-950 dark:text-sky-100/95 px-3 py-2"
+        class="gp-callout-info"
       >
         {{ w }}
       </p>
     </div>
 
-    <p
-      v-if="reviewError"
-      class="mb-4 text-sm text-red-600 dark:text-red-400"
-      role="alert"
-    >
+    <p v-if="reviewError" class="gp-inline-error mb-4" role="alert">
       {{ reviewError }}
     </p>
 
-    <div
-      v-if="reviewResult"
-      class="mb-8 rounded-lg border border-[#e0e0e0] dark:border-[#444] bg-[#fafafa] dark:bg-[#141414] p-4 space-y-3"
-    >
+    <div v-if="reviewResult" class="gp-panel mb-8 space-y-4">
       <div class="flex items-baseline gap-3 flex-wrap">
-        <span class="text-sm font-medium text-[#333] dark:text-[#ccc]"
+        <span class="text-sm font-semibold text-gp-muted"
           >综合得分</span
         >
         <span
-          class="text-3xl font-semibold tabular-nums text-[#0f0f0f] dark:text-[#f6f6f6]"
+          class="text-3xl font-semibold tabular-nums text-gp-ink tracking-tight font-mono"
           >{{ reviewResult.score }}</span
         >
-        <span class="text-sm text-[#666] dark:text-[#999]">/ 100</span>
+        <span class="text-sm text-gp-faint">/ 100</span>
       </div>
       <div>
-        <h3 class="text-sm font-medium text-[#333] dark:text-[#ccc] mb-2">
+        <h3 class="text-sm font-semibold text-gp-ink mb-2">
           修改建议
         </h3>
         <ol
-          class="list-decimal pl-5 space-y-2 text-sm text-[#333] dark:text-[#ddd]"
+          class="list-decimal pl-5 space-y-2 text-sm text-gp-ink leading-relaxed"
         >
           <li v-for="(s, i) in reviewResult.suggestions" :key="i">
             {{ s }}
@@ -539,27 +894,11 @@ function submitInterjection() {
       </div>
     </div>
 
-    <p
-      v-if="!hasAny"
-      class="text-sm text-amber-800 dark:text-amber-200/90 rounded-lg border border-amber-200 dark:border-amber-900/80 bg-amber-50 dark:bg-amber-950/40 px-3 py-2"
-    >
+    <p v-if="!hasAny" class="gp-callout-warn mb-4">
       暂无解析内容。请从文档入口完成「准备评审」。
     </p>
-    <p
-      v-else
-      class="text-xs text-[#888] dark:text-[#777] mb-6"
-    >
-      本页不重复展示解析正文；需看摘要或全文请用下方「返回解析预览」。
-    </p>
-
-    <p class="mt-8">
-      <button
-        type="button"
-        class="text-sm text-[#396cd8] hover:underline dark:text-[#6b9eff] bg-transparent border-0 cursor-pointer p-0 font-inherit"
-        @click="goBack"
-      >
-        ← 返回解析预览
-      </button>
+    <p v-else class="text-xs text-gp-faint mb-6 max-w-[65ch]">
+      本页不重复展示解析正文；需看摘要或全文请点页顶「返回解析预览」。
     </p>
   </div>
 </template>

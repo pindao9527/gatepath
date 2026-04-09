@@ -6,6 +6,20 @@ export function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, "");
 }
 
+/**
+ * 解析 HTTP 响应体为 JSON；非 JSON（HTML 错误页、纯文本等）时抛出 Error，
+ * message 经 {@link humanizeApiErrorMessage} 处理，便于与现有 API 错误文案一致。
+ */
+export function parseJsonResponseHumanized<T>(raw: string, httpStatus: number): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const preview = raw.replace(/\s+/g, " ").trim().slice(0, 240);
+    const detail = `接口返回体不是合法 JSON，可能被网关返回了 HTML 或纯文本。HTTP ${httpStatus}${preview ? `。片段：${preview}` : "。"}`;
+    throw new Error(humanizeApiErrorMessage(detail));
+  }
+}
+
 export function humanizeApiErrorMessage(message: string): string {
   const m = message.trim();
   if (

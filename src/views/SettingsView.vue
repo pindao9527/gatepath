@@ -20,62 +20,62 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    class="mx-auto max-w-2xl w-full px-4 py-8 text-left font-sans text-[#0f0f0f] dark:text-[#f6f6f6]"
-  >
-    <h1 class="text-xl font-semibold tracking-tight mb-1">API 配置</h1>
-    <p class="text-sm text-[#666] dark:text-[#aaa] mb-8">
-      Base URL 与 Model 保存在本应用数据目录；API Key 可选写入系统钥匙串（macOS
-      钥匙串等），关闭后不会在磁盘保存密钥。
-    </p>
+  <div class="gp-page-wrap">
+    <header class="gp-page-head">
+      <p class="gp-kicker">系统</p>
+      <h1 class="gp-title mb-3">API 配置</h1>
+      <p class="gp-lead">
+        Base URL 与 Model 保存在本应用数据目录；API Key 可选写入系统钥匙串（macOS
+        钥匙串等），关闭后不会在磁盘保存密钥。
+      </p>
+    </header>
 
-    <p
-      v-if="loadError"
-      class="mb-4 text-sm text-red-600 dark:text-red-400"
-      role="alert"
-    >
+    <p v-if="loadError" class="gp-inline-error mb-6" role="alert">
       {{ loadError }}
     </p>
 
-    <div v-if="!loaded" class="text-sm text-[#666] dark:text-[#aaa]">
-      正在加载设置…
+    <div
+      v-if="!loaded"
+      class="gp-panel-quiet space-y-4"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <div class="h-3 w-28 gp-skeleton-bar" />
+      <div class="h-10 w-full gp-skeleton-bar" />
+      <div class="h-3 w-36 gp-skeleton-bar" />
+      <div class="h-10 w-full gp-skeleton-bar" />
+      <p class="text-xs text-gp-faint font-mono">正在加载设置…</p>
     </div>
 
-    <div v-else class="space-y-6">
-      <div>
-        <label
-          for="base-url"
-          class="block text-sm font-medium mb-2 text-[#333] dark:text-[#ccc]"
-          >Base URL</label
-        >
+    <div v-else class="gp-panel space-y-8">
+      <div class="space-y-2">
+        <label for="base-url" class="gp-label">Base URL</label>
         <input
           id="base-url"
           v-model="baseUrl"
           type="url"
           autocomplete="off"
           placeholder="https://api.openai.com/v1"
-          class="w-full rounded-lg border border-[#e0e0e0] dark:border-[#444] px-3 py-2.5 text-sm bg-white dark:bg-[#1a1a1a] outline-none focus:border-[#396cd8] transition-colors"
+          class="gp-input"
         />
       </div>
 
-      <div class="flex items-start gap-3">
+      <div
+        class="flex items-start gap-3 rounded-xl border border-gp-border/60 bg-gp-surface/40 dark:bg-gp-canvas/30 px-3 py-3"
+      >
         <input
           id="use-keyring"
           v-model="useKeyringForApiKey"
           type="checkbox"
-          class="mt-1 rounded border-[#e0e0e0] dark:border-[#444]"
+          class="mt-0.5 rounded border-gp-border accent-gp-accent shrink-0"
         />
-        <label for="use-keyring" class="text-sm text-[#333] dark:text-[#ccc]">
+        <label for="use-keyring" class="text-sm text-gp-ink leading-snug">
           将 API Key 存入系统钥匙串
         </label>
       </div>
 
-      <div>
-        <label
-          for="api-key"
-          class="block text-sm font-medium mb-2 text-[#333] dark:text-[#ccc]"
-          >API Key</label
-        >
+      <div class="space-y-2">
+        <label for="api-key" class="gp-label">API Key</label>
         <input
           id="api-key"
           v-model="apiKey"
@@ -84,36 +84,29 @@ onMounted(() => {
           :placeholder="
             useKeyringForApiKey ? 'sk-…' : '仅本次运行有效，关闭应用后需重新填写'
           "
-          class="w-full rounded-lg border border-[#e0e0e0] dark:border-[#444] px-3 py-2.5 text-sm bg-white dark:bg-[#1a1a1a] outline-none focus:border-[#396cd8] transition-colors font-mono"
+          class="gp-input font-mono tabular-nums"
         />
-        <p
-          v-if="!useKeyringForApiKey"
-          class="mt-1.5 text-xs text-[#888] dark:text-[#777]"
-        >
+        <p v-if="!useKeyringForApiKey" class="gp-helper">
           未启用钥匙串时不会在磁盘保存密钥；可仅在当前会话填写供后续评审使用。
         </p>
       </div>
 
-      <div>
-        <label
-          for="model"
-          class="block text-sm font-medium mb-2 text-[#333] dark:text-[#ccc]"
-          >Model</label
-        >
+      <div class="space-y-2">
+        <label for="model" class="gp-label">Model</label>
         <input
           id="model"
           v-model="model"
           type="text"
           autocomplete="off"
           placeholder="gpt-4o-mini"
-          class="w-full rounded-lg border border-[#e0e0e0] dark:border-[#444] px-3 py-2.5 text-sm bg-white dark:bg-[#1a1a1a] outline-none focus:border-[#396cd8] transition-colors"
+          class="gp-input"
         />
       </div>
 
-      <div class="pt-2">
+      <div class="gp-action-bar border-t border-gp-border/70 pt-6">
         <button
           type="button"
-          class="rounded-lg bg-[#396cd8] text-white text-sm font-medium px-4 py-2.5 hover:bg-[#2f5ac4] disabled:opacity-50 disabled:pointer-events-none transition-colors"
+          class="gp-btn-primary px-5 py-2.5"
           :disabled="saving"
           @click="save()"
         >

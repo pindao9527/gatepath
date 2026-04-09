@@ -267,41 +267,41 @@ async function onStartPrepareReview() {
 </script>
 
 <template>
-  <div
-    class="mx-auto max-w-2xl w-full px-4 py-8 text-left font-sans text-[#0f0f0f] dark:text-[#f6f6f6]"
-  >
-    <h1 class="text-xl font-semibold tracking-tight mb-1">文档入口</h1>
-    <p class="text-sm text-[#666] dark:text-[#aaa] mb-8">
-      填写地址后点击「准备评审」：拉取文档并解析为评审用文本（按扩展名：
-      <code class="text-xs px-1 rounded bg-[#eee] dark:bg-[#333]">.md</code>、
-      <code class="text-xs px-1 rounded bg-[#eee] dark:bg-[#333]">.docx</code>、
-      <code class="text-xs px-1 rounded bg-[#eee] dark:bg-[#333]">.xmind</code>
-      等），随后进入解析预览；多角色模型评审见后续步骤。桌面端由应用内请求拉取（避免跨域）；支持
-      <code class="text-xs px-1 rounded bg-[#eee] dark:bg-[#333]">http(s)</code>、
-      <code class="text-xs px-1 rounded bg-[#eee] dark:bg-[#333]">file://</code>
-      与可读本地路径。
-    </p>
+  <div class="gp-page-wrap">
+    <header class="gp-page-head">
+      <p class="gp-kicker">01 · 录入</p>
+      <h1 class="gp-title mb-3">文档入口</h1>
+      <p class="gp-lead">
+        填写地址后点击「准备评审」：拉取文档并解析为评审用文本（按扩展名
+        <code class="gp-code">.md</code>、<code class="gp-code">.docx</code>、
+        <code class="gp-code">.xmind</code>
+        等），随后进入解析预览；多角色模型评审见后续步骤。桌面端由应用内请求拉取（避免跨域）；支持
+        <code class="gp-code">http(s)</code>、<code class="gp-code">file://</code>
+        与可读本地路径。
+      </p>
+    </header>
 
-    <div class="space-y-6">
-      <div>
-        <label
-          for="req-url"
-          class="block text-sm font-medium mb-2 text-[#333] dark:text-[#ccc]"
-          >需求文档地址</label
-        >
-        <div class="flex gap-2 items-stretch">
+    <div class="grid grid-cols-1 gap-6 lg:gap-8 lg:grid-cols-12 lg:items-start">
+      <section class="gp-panel space-y-3 lg:col-span-7">
+        <div>
+          <label for="req-url" class="gp-label">需求文档地址</label>
+          <p class="gp-helper">
+            支持 URL、本地绝对路径；浏览器内可改用「选择文件」。
+          </p>
+        </div>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
           <input
             id="req-url"
             v-model="requirementUrl"
             type="text"
             autocomplete="off"
             placeholder="https://...、file:///... 或本地绝对路径"
-            class="flex-1 min-w-0 rounded-lg border border-[#e0e0e0] dark:border-[#444] px-3 py-2.5 text-sm bg-white dark:bg-[#1a1a1a] outline-none focus:border-[#396cd8] transition-colors"
+            class="gp-input flex-1 min-w-0"
             @input="onRequirementUrlInput"
           />
           <button
             type="button"
-            class="shrink-0 rounded-lg px-4 py-2.5 text-sm font-medium border border-[#e0e0e0] dark:border-[#444] bg-white dark:bg-[#222] text-[#333] dark:text-[#e8e8e8] hover:bg-[#f5f5f5] dark:hover:bg-[#2a2a2a] transition-colors"
+            class="gp-btn-secondary shrink-0 px-4 py-2.5 whitespace-nowrap"
             title="选择本地文件（桌面端为系统对话框）"
             @click="pickRequirementLocal"
           >
@@ -315,27 +315,26 @@ async function onStartPrepareReview() {
           accept=".md,.markdown,.docx,.xmind"
           @change="onRequirementFileChange"
         />
-      </div>
+      </section>
 
-      <div>
-        <label
-          for="test-url"
-          class="block text-sm font-medium mb-2 text-[#333] dark:text-[#ccc]"
-          >测试文档地址</label
-        >
-        <div class="flex gap-2 items-stretch">
+      <section class="gp-panel space-y-3 lg:col-span-5">
+        <div>
+          <label for="test-url" class="gp-label">测试文档地址</label>
+          <p class="gp-helper">可与需求文档二选一或同时提供。</p>
+        </div>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
           <input
             id="test-url"
             v-model="testUrl"
             type="text"
             autocomplete="off"
             placeholder="https://...、file:///... 或本地路径"
-            class="flex-1 min-w-0 rounded-lg border border-[#e0e0e0] dark:border-[#444] px-3 py-2.5 text-sm bg-white dark:bg-[#1a1a1a] outline-none focus:border-[#396cd8] transition-colors"
+            class="gp-input flex-1 min-w-0"
             @input="onTestUrlInput"
           />
           <button
             type="button"
-            class="shrink-0 rounded-lg px-4 py-2.5 text-sm font-medium border border-[#e0e0e0] dark:border-[#444] bg-white dark:bg-[#222] text-[#333] dark:text-[#e8e8e8] hover:bg-[#f5f5f5] dark:hover:bg-[#2a2a2a] transition-colors"
+            class="gp-btn-secondary shrink-0 px-4 py-2.5 whitespace-nowrap"
             title="选择本地文件（桌面端为系统对话框）"
             @click="pickTestLocal"
           >
@@ -349,40 +348,43 @@ async function onStartPrepareReview() {
           accept=".md,.markdown,.docx,.xmind"
           @change="onTestFileChange"
         />
-      </div>
+      </section>
+    </div>
 
-      <p
-        v-if="downloadError"
-        class="text-sm text-red-600 dark:text-red-400"
-        role="alert"
-      >
-        {{ downloadError }}
-      </p>
+    <p v-if="downloadError" class="gp-inline-error mt-6" role="alert">
+      {{ downloadError }}
+    </p>
 
-      <div class="flex flex-wrap items-center gap-3 pt-2">
-        <button
-          type="button"
-          :disabled="processing"
-          class="rounded-lg px-5 py-2.5 text-sm font-medium cursor-pointer bg-[#396cd8] text-white hover:bg-[#2d56b3] active:bg-[#264a99] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          @click="onStartPrepareReview"
-        >
-          {{ processing ? "准备中…" : "准备评审" }}
-        </button>
-        <button
-          v-if="processing"
-          type="button"
-          class="rounded-lg px-5 py-2.5 text-sm font-medium cursor-pointer border border-red-500/80 bg-white text-red-600 hover:bg-red-50 dark:bg-[#2a2a2a] dark:text-red-400 dark:border-red-400/80 dark:hover:bg-red-950/40"
-          @click="onCancelPrepare"
-        >
-          取消
-        </button>
-      </div>
-      <p
-        v-if="processing && prepareStatusLine"
-        class="text-sm text-[#666] dark:text-[#aaa] pt-1"
-        role="status"
-        aria-live="polite"
+    <div class="gp-action-bar mt-8">
+      <button
+        type="button"
+        :disabled="processing"
+        class="gp-btn-primary px-5 py-2.5 cursor-pointer disabled:cursor-not-allowed"
+        @click="onStartPrepareReview"
       >
+        {{ processing ? "准备中…" : "准备评审" }}
+      </button>
+      <button
+        v-if="processing"
+        type="button"
+        class="gp-btn rounded-lg px-5 py-2.5 cursor-pointer border border-red-500/75 bg-gp-surface text-red-600 hover:bg-red-50 dark:border-red-400/70 dark:text-red-300 dark:hover:bg-red-950/35 gp-focus"
+        @click="onCancelPrepare"
+      >
+        取消
+      </button>
+    </div>
+
+    <div
+      v-if="processing && prepareStatusLine"
+      class="gp-panel-quiet mt-5"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="text-sm text-gp-muted flex items-center gap-2.5">
+        <span
+          class="inline-block size-1.5 shrink-0 rounded-full bg-gp-accent motion-safe:animate-pulse"
+          aria-hidden="true"
+        />
         {{ prepareStatusLine }}
       </p>
     </div>

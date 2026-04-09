@@ -10,5 +10,6 @@
 pnpm install
 pnpm dev          # 仅前端（浏览器）
 pnpm tauri dev    # 桌面端
+pnpm test         # 单元测试（vitest）
 pnpm run build    # 前端生产构建
 ```
