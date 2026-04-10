@@ -1,7 +1,7 @@
 {
   "name": "gatepath",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,8 +15,10 @@
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-store": "^2.4.2",
+    "@unocss/reset": "^66.6.8",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
+    "markstream-vue": "^0.0.12",
     "tauri-plugin-keyring-api": "^0.1.1",
     "vue": "^3.5.32",
     "vue-router": "4"

@@ -32,6 +32,7 @@ import {
   TAVERN_V2E_MAX_TOTAL_ROUNDS,
   validateMiddleRoleCount,
 } from "../../lib/tavernDynamicRoles";
+import TavernChatMarkdown from "../../components/TavernChatMarkdown.vue";
 
 const router = useRouter();
 const {
@@ -154,10 +155,10 @@ const tavernStatusLine = computed(() => {
   if (!reviewing.value || reviewMode.value !== "tavern") return "";
   if (interjectionGate.value) {
     const nextName = interjectionGate.value.ctx.nextRole.speaker;
-    return `酒馆：可插话或跳过 → 下一位「${nextName}」`;
+    return `想补充一句？下一位是「${nextName}」——可插话，或跳过直接继续`;
   }
-  if (tavernRoundIndex.value <= 0) return "酒馆：准备首轮…";
-  return `酒馆：第 ${tavernRoundIndex.value} / ${tavernRoundTotal.value} 轮流式输出中…`;
+  if (tavernRoundIndex.value <= 0) return "对话准备中…";
+  return `第 ${tavernRoundIndex.value} / ${tavernRoundTotal.value} 位角色正在回复…`;
 });
 
 onMounted(async () => {
@@ -664,7 +665,7 @@ function resetTavernRolesToDefault() {
               :disabled="reviewing"
               @click="resetTavernRolesToDefault"
             >
-              恢复默认（产品 + 测试）
+              恢复默认（教研·产品·家长·学生）
             </button>
           </div>
 
@@ -761,27 +762,35 @@ function resetTavernRolesToDefault() {
         (tavernMessages.length > 0 || interjectionGate)
       "
       ref="tavernListEl"
-      class="gp-panel mb-8 max-h-[min(60dvh,30rem)] overflow-y-auto flex flex-col !p-0"
+      class="gp-panel mb-8 max-h-[min(60dvh,30rem)] overflow-y-auto flex flex-col !p-0 rounded-2xl"
       role="log"
       aria-live="polite"
     >
-      <ul class="p-4 md:p-5 space-y-4 flex-1 min-h-0">
+      <div
+        class="shrink-0 px-4 pt-3 pb-1 border-b border-gp-border/60 bg-gp-canvas-2/50"
+      >
+        <p class="text-xs font-medium text-gp-muted">角色对话</p>
+        <p class="text-[11px] text-gp-faint mt-0.5">
+          以下为多角色按序回复；支持标题、列表与代码块等 Markdown 展示。
+        </p>
+      </div>
+      <ul class="p-4 md:p-5 space-y-5 flex-1 min-h-0">
         <li
           v-for="m in tavernMessages"
           :key="m.id"
-          class="flex gap-3 items-start"
+          class="flex gap-3 items-end"
           :class="m.kind === 'user' ? 'flex-row-reverse' : ''"
         >
           <div
-            class="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-sm"
+            class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold shadow-sm ring-2 ring-white/20"
             :class="m.avatarClass"
             :aria-label="m.speaker"
           >
             {{ m.shortLabel.slice(0, 1) }}
           </div>
           <div
-            class="min-w-0 space-y-1"
-            :class="m.kind === 'user' ? 'text-right flex-1' : 'flex-1'"
+            class="min-w-0 space-y-1.5 max-w-[min(100%,42rem)]"
+            :class="m.kind === 'user' ? 'text-right flex flex-col items-end' : ''"
           >
             <div
               class="flex items-baseline gap-2 flex-wrap"
@@ -793,18 +802,29 @@ function resetTavernRolesToDefault() {
               <span
                 v-if="m.streaming"
                 class="text-xs text-gp-faint tabular-nums"
-                >输出中…</span
+                >正在输入…</span
               >
             </div>
             <div
-              class="rounded-lg border px-3 py-2 text-sm whitespace-pre-wrap break-words inline-block max-w-full text-left"
+              class="rounded-2xl px-3.5 py-2.5 text-left shadow-sm break-words w-full"
               :class="
                 m.kind === 'user'
-                  ? 'border-gp-border bg-gp-accent-dim text-gp-ink'
-                  : 'border-gp-border bg-gp-surface text-gp-ink'
+                  ? 'bg-gp-accent-dim border border-gp-border/90 rounded-br-md'
+                  : 'bg-gp-elevated border border-gp-border/80 rounded-bl-md'
               "
             >
-              {{ m.content }}
+              <p
+                v-if="m.streaming && !m.content"
+                class="text-sm text-gp-faint m-0"
+              >
+                …
+              </p>
+              <TavernChatMarkdown
+                v-else
+                :bubble-key="m.id"
+                :text="m.content"
+                :streaming="m.streaming"
+              />
             </div>
           </div>
         </li>
@@ -815,12 +835,12 @@ function resetTavernRolesToDefault() {
         class="shrink-0 border-t border-gp-border p-3 bg-gp-accent-dim space-y-2"
       >
         <p class="text-xs font-medium text-gp-ink">
-          下一位：{{ interjectionGate.ctx.nextRole.speaker }} — 可选插话（将作为下一轮独立请求的 user 消息）
+          接着轮到「{{ interjectionGate.ctx.nextRole.speaker }}」——想说两句可以现在写（会作为你的发言接进对话里）
         </p>
         <textarea
           v-model="interjectionDraft"
           rows="2"
-          placeholder="输入补充意见，或留空后点「跳过」…"
+          placeholder="随便补一句，比如补充背景或约束；不需要就点跳过"
           class="gp-input w-full text-sm py-2"
         />
         <div class="flex flex-wrap gap-2 justify-end">

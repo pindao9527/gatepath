@@ -5,7 +5,7 @@ import {
   rebuildMiddleRolesPrompts,
   validateMiddleRoleCount,
 } from "./tavernDynamicRoles";
-import { getDefaultTavernMiddleRoles } from "./reviewApi";
+import { getDefaultTavernMiddleRoles } from "./tavernRoleCatalog";
 
 describe("inferRuleHitsFromText", () => {
   it("matches compliance keywords", () => {
@@ -33,7 +33,7 @@ describe("mergeMiddleRolesFromSources", () => {
       fallbackMiddle: fb,
     });
     expect(merged.length).toBe(fb.length);
-    expect(merged[0]?.id).toBe("pm");
+    expect(merged[0]?.id).toBe("teaching_research");
   });
 });
 
@@ -48,7 +48,7 @@ describe("rebuildMiddleRolesPrompts", () => {
   it("first role uses first-middle template", () => {
     const base = getDefaultTavernMiddleRoles();
     const rebuilt = rebuildMiddleRolesPrompts(base.map((r) => ({ ...r })));
-    expect(rebuilt[0]?.turnUserPrompt).toContain("### 现象");
+    expect(rebuilt[0]?.turnUserPrompt).toContain("### 教学目标与关注点");
     expect(rebuilt[1]?.turnUserPrompt).toContain("## 与前序一致点");
   });
 });

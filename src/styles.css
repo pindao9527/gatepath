@@ -43,10 +43,6 @@ html {
   scroll-behavior: smooth;
 }
 
-body {
-  margin: 0;
-}
-
 #app {
   font-family:
     "Outfit",
@@ -85,6 +81,32 @@ a {
 
 a:hover {
   color: var(--gp-accent-hover);
+}
+
+/* 酒馆对话气泡内 Markdown：缩小标题级差，贴近聊天阅读 */
+.tavern-md :is(h1, h2, h3) {
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0.65em 0 0.35em;
+}
+.tavern-md h1 {
+  font-size: 1.125rem;
+}
+.tavern-md h2 {
+  font-size: 1.05rem;
+}
+.tavern-md h3 {
+  font-size: 1rem;
+}
+.tavern-md :is(ul, ol) {
+  margin: 0.35em 0;
+  padding-left: 1.25em;
+}
+.tavern-md pre {
+  font-size: 0.8125rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
 }
 
 /* 路由切换：仅透明度与位移，避免布局抖动 */

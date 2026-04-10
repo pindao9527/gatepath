@@ -21,10 +21,10 @@ const isHomeNavActive = computed(() =>
       aria-hidden="true"
     >
       <div
-        class="absolute -top-40 -right-16 h-[28rem] w-[28rem] rounded-full bg-gp-accent/[0.07] blur-3xl dark:bg-gp-accent/[0.05]"
+        class="absolute -top-40 -right-16 h-[28rem] w-[28rem] rounded-full bg-white/45 blur-3xl dark:bg-white/[0.07]"
       />
       <div
-        class="absolute -bottom-24 -left-20 h-[22rem] w-[26rem] rounded-full bg-gp-accent/[0.05] blur-3xl dark:bg-gp-accent/[0.04]"
+        class="absolute -bottom-24 -left-20 h-[22rem] w-[26rem] rounded-full bg-white/35 blur-3xl dark:bg-white/[0.055]"
       />
     </div>
 
@@ -38,10 +38,10 @@ const isHomeNavActive = computed(() =>
         aria-hidden="true"
       />
       <nav
-        class="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-10 min-h-[3.75rem] py-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        class="mx-auto max-w-7xl w-full min-w-0 px-4 sm:px-6 lg:px-10 min-h-[3.75rem] py-3 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-evenly md:gap-x-6 md:gap-y-3"
         aria-label="主导航"
       >
-        <div class="flex flex-col gap-0.5 min-w-0 sm:pr-6">
+        <div class="flex min-w-0 flex-col gap-0.5">
           <span
             class="font-mono text-[0.62rem] font-medium uppercase tracking-[0.22em] text-gp-faint"
           >
@@ -52,7 +52,7 @@ const isHomeNavActive = computed(() =>
               门径
             </span>
             <span
-              class="text-xs font-normal text-gp-muted max-w-[20rem] leading-snug"
+              class="text-xs font-normal text-gp-muted max-w-full sm:max-w-[20rem] leading-snug"
             >
               需求与测试文档的本地评审
             </span>
@@ -60,7 +60,7 @@ const isHomeNavActive = computed(() =>
         </div>
 
         <div
-          class="flex items-center gap-1.5 rounded-full p-1 bg-gp-surface/85 dark:bg-gp-surface/50 border border-gp-border/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md self-start sm:self-auto"
+          class="flex shrink-0 items-center gap-1.5 self-start rounded-full border border-gp-border/90 bg-gp-surface/85 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-md dark:bg-gp-surface/50 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] md:self-auto"
         >
           <RouterLink
             :to="{ name: 'review-input' }"

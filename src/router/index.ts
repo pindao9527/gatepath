@@ -62,7 +62,7 @@ router.afterEach((to) => {
     .reverse()
     .find((r) => r.meta.title != null);
   const title = matchedWithTitle?.meta.title as string | undefined;
-  document.title = title ? `门径 · ${title}` : "门径";
+  document.title = title ? `门径 · ${title}` : "门径 · Gatepath";
 });
 
 export default router;

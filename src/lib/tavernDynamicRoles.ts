@@ -2,13 +2,13 @@
  * v2-E：动态角色 — 规则关键词推断、轮次/角色上限与提示合并（与 prepareTextsForModel 协同由调用方注入截断后正文）。
  */
 
+import {
+  TAVERN_V2C_PM_MIN_CHARS,
+  TAVERN_V2C_PM_MIN_SENTENCES,
+  TAVERN_V2C_QA_MIN_CHARS,
+  TAVERN_V2C_QA_MIN_SENTENCES,
+} from "./tavernRoleCatalog";
 import type { TavernRoleConfig } from "./tavernRoleTypes";
-
-/** 与 reviewApi 中 TAVERN_V2C_* 保持同步（首轮 / 跟进轮的最低展开度） */
-const V2C_PM_MIN_SENTENCES = 4;
-const V2C_PM_MIN_CHARS = 180;
-const V2C_QA_MIN_SENTENCES = 5;
-const V2C_QA_MIN_CHARS = 220;
 
 /** 中间发言轮（不含末轮「综合主持」JSON）上限 */
 export const TAVERN_V2E_MAX_MIDDLE_ROLES = 10;
@@ -45,10 +45,69 @@ interface KeywordRule {
 
 const KEYWORD_RULES: KeywordRule[] = [
   {
+    id: "curriculum",
+    speaker: "课标与课程建设",
+    shortLabel: "课标",
+    patterns: [
+      /课标/i,
+      /课程标准/i,
+      /核心素养/i,
+      /校本课程/i,
+      /大单元/i,
+      /学段/i,
+      /新课标/i,
+    ],
+  },
+  {
+    id: "teaching_practice",
+    speaker: "教学实施与课堂",
+    shortLabel: "课堂",
+    patterns: [/课堂/i, /授课/i, /教案/i, /师生/i, /班级/i, /班主任/i],
+  },
+  {
+    id: "student_assessment",
+    speaker: "学业评价与测验",
+    shortLabel: "评价",
+    patterns: [/学业/i, /量规/i, /作业/i, /测验/i, /阅卷/i, /学情/i, /考试/i],
+  },
+  {
+    id: "product_manager",
+    speaker: "产品经理（教育产品）",
+    shortLabel: "产品",
+    patterns: [
+      /产品经理/i,
+      /产品规划/i,
+      /PRD/i,
+      /需求评审/i,
+      /Backlog/i,
+      /版本规划/i,
+      /产品目标/i,
+    ],
+  },
+  {
+    id: "parent_guardian",
+    speaker: "家长与家校协同",
+    shortLabel: "家长",
+    patterns: [/家长/i, /监护人/i, /家长端/i, /家长会/i, /接送/i, /陪读/i],
+  },
+  {
+    id: "student_user",
+    speaker: "学生与学习者",
+    shortLabel: "学生",
+    patterns: [
+      /学生端/i,
+      /学习者/i,
+      /学员/i,
+      /在校生/i,
+      /中小学生/i,
+      /学伴/i,
+    ],
+  },
+  {
     id: "edu_principal",
-    speaker: "校长视角",
+    speaker: "校长与治理视角",
     shortLabel: "校长",
-    patterns: [/校长/i, /教育局/i, /校园/i, /家校/i],
+    patterns: [/校长/i, /教育局/i, /教育厅/i, /校园/i, /家校/i, /年级组/i],
   },
   {
     id: "legal",
@@ -92,7 +151,7 @@ function pickAvatarClass(index: number): string {
   return AVATAR_CYCLE[index % AVATAR_CYCLE.length]!;
 }
 
-/** 首轮中间角色：现象 / 依据 / 建议（与 v2-C 产品轮同构，身份可替换） */
+/** 首轮中间角色：教学目标 / 依据 / 建议（与内置「教研」轮同构，身份可替换） */
 export function buildFirstMiddleTurnPrompt(options: {
   speaker: string;
   turnPromptHint?: string | null;
@@ -102,17 +161,17 @@ export function buildFirstMiddleTurnPrompt(options: {
       ? `\n\n【本视角关注点】${options.turnPromptHint.trim()}`
       : "";
   return `请「${options.speaker}」发言。输出须含以下三段，每段使用 Markdown 三级标题（勿合并为一段）：
-### 现象
-从业务目标与用户场景出发，概括你关注到的重点、缺口或异常。
-### 依据
-结合【需求文档】【测试文档】正文（可能已截断）说明判断依据，可点到具体表述或范围。
+### 教学目标与关注点
+从课程标准、学习者场景与教育业务目标出发，概括你关注的重点、缺口或异常。
+### 依据（课标/方案/正文）
+结合【需求文档】【测试文档】正文（可能已截断）说明判断依据，可点到具体表述、范围或政策口径。
 ### 建议与风险
-给出可跟进的需求侧建议与主要风险（可含优先级提示）。
+给出可跟进的教育业务侧建议与主要风险（可含优先级提示）。
 
-**展开度**：全文至少 ${V2C_PM_MIN_SENTENCES} 句完整中文，且总字数不少于 ${V2C_PM_MIN_CHARS} 字；禁止仅用一句话、或仅列提纲式短语而无展开说明。${hintBlock}`;
+**展开度**：全文至少 ${TAVERN_V2C_PM_MIN_SENTENCES} 句完整中文，且总字数不少于 ${TAVERN_V2C_PM_MIN_CHARS} 字；禁止仅用一句话、或仅列提纲式短语而无展开说明。${hintBlock}`;
 }
 
-/** 非首轮中间角色：对照前序（与 v2-C 测试轮同构） */
+/** 非首轮中间角色：对照前序（与内置「教学落地」轮同构） */
 export function buildFollowMiddleTurnPrompt(options: {
   speaker: string;
   turnPromptHint?: string | null;
@@ -123,13 +182,13 @@ export function buildFollowMiddleTurnPrompt(options: {
       : "";
   return `请「${options.speaker}」发言。你必须**对照**上方【前序角色发言】中其它角色的结论，并分节输出（使用 Markdown 二级标题，**三节缺一不可**）：
 ## 与前序一致点
-列出你与前序各角色在范围、优先级或风险判断上的共识（每条用完整句子）。
+列出你与前序各角色在教学目标、范围或风险判断上的共识（每条用完整句子）。
 ## 分歧或待核实点
-列出意见不一致、或需与产研/业务对齐的疑点（说明分歧因由）。
+列出意见不一致、或需与教研/产研/学校业务对齐的疑点（说明分歧因由）。
 ## 补充点（本视角）
-从本角色专业视角提出覆盖度、可测性、遗漏与实施风险等补充（可与上两节交叉引用）。
+从本角色专业视角提出课堂落地、学业评价、可测性、遗漏与实施风险等补充（可与上两节交叉引用）。
 
-**展开度**：全文至少 ${V2C_QA_MIN_SENTENCES} 句完整中文，且总字数不少于 ${V2C_QA_MIN_CHARS} 字；每节须有可独立阅读的段落正文，禁止仅列关键词。${hintBlock}`;
+**展开度**：全文至少 ${TAVERN_V2C_QA_MIN_SENTENCES} 句完整中文，且总字数不少于 ${TAVERN_V2C_QA_MIN_CHARS} 字；每节须有可独立阅读的段落正文，禁止仅列关键词。${hintBlock}`;
 }
 
 export function ruleHitToMiddleConfig(
@@ -204,7 +263,7 @@ export function mergeMiddleRolesFromSources(options: {
   ruleHits: RuleHit[];
   /** 模型抽取（可为空） */
   modelRoles: ModelExtractedRole[] | null;
-  /** 当规则与模型均为空时，使用这一对默认中间角色（通常为产品+测试） */
+  /** 当规则与模型均为空时，使用这一对默认中间角色（通常为教研+教学落地） */
   fallbackMiddle: TavernRoleConfig[];
 }): TavernRoleConfig[] {
   const { ruleHits, modelRoles, fallbackMiddle } = options;
